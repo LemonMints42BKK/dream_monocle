@@ -1,14 +1,14 @@
-# CPX M0 Dream Monocle - Ben Jabituya
+# CPX M0 Dream Monocle - Ben Jabituya Debug by P. Nopjiragul
+from adafruit_circuitplayground.express import cpx
 import time
-import board
-import neopixel
-import digitalio
-from analogio import AnalogIn
-import adafruit_lis3dh
 import busio
+import board
+import adafruit_lis3dh
+from analogio import AnalogIn
 import math
 import microcontroller
-import array
+import digitalio
+import neopixel
 
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -22,13 +22,13 @@ time_delay_button = digitalio.DigitalInOut(board.D5)
 time_delay_button.direction = digitalio.Direction.INPUT
 time_delay_button.pull = digitalio.Pull.DOWN
 
-#ADVANCED SETTINGS
+# ADVANCED SETTINGS
 cooldown_delay = 200
 passive_mode = False
 led_brightness = 0.06
 time_delay = 2
 rainbow_cycle_count = 8
-log_limit = 2000 #lines
+log_limit = 2000  # lines
 
 i2c = busio.I2C(board.ACCELEROMETER_SCL, board.ACCELEROMETER_SDA)
 lis3dh = adafruit_lis3dh.LIS3DH_I2C(i2c, address=0x19)
@@ -39,13 +39,35 @@ analog1in = AnalogIn(board.IR_PROXIMITY)
 ir_led = digitalio.DigitalInOut(board.IR_TX)
 ir_led.direction = digitalio.Direction.OUTPUT
 
+def set_brightness():
+    global led_brightness
+    cpx.pixels.fill(GREEN)
+    cpx.pixels.show()
+    time.sleep(1)
+    start_time = time.monotonic()
+    timegap = time.monotonic() - start_time
+    while timegap < 5:
+        if brightness_button.value:
+            time.sleep(0.1)
+            start_time = time.monotonic()  # reset counter
+            if led_brightness > 0.1:
+                led_brightness = 0.02
+            else:
+                led_brightness += 0.02
+            cpx.pixels.brightness = led_brightness
+            cpx.pixels.fill(GREEN)
+            cpx.pixels.show()
+        timegap = time.monotonic() - start_time
+    cpx.pixels.fill(OFF)
+    cpx.pixels.show()
+
 def set_delay():
     global time_delay
     global boot_time
 
     for led in range(time_delay):
-        pixels[led] = RED
-        pixels.show()
+        cpx.pixels[led] = RED
+        cpx.pixels.show()
     boot_time = time.monotonic()
     time.sleep(1)
     start_time = time.monotonic()
@@ -55,45 +77,21 @@ def set_delay():
         if time_delay_button.value:
             time.sleep(0.1)
             start_time = time.monotonic()
-            if time_delay  == 10:
+            if time_delay == 10:
                 time_delay = 1
             else:
                 time_delay += 1
-            pixels.fill(OFF)
-            pixels.show()
+            cpx.pixels.fill(OFF)
+            cpx.pixels.show()
 
             for led in range(time_delay):
-                pixels[led] = RED
-                pixels.show()
+                cpx.pixels[led] = RED
+                cpx.pixels.show()
         timegap = time.monotonic() - start_time
     save_settings()
     rainbow_cycle(0.05)
-    pixels.fill(OFF)
-    pixels.show()
-
-def set_brightness():
-    global led_brightness
-    pixels.fill(GREEN)
-    pixels.show()
-    time.sleep(1)
-    start_time = time.monotonic()
-    timegap = time.monotonic() - start_time
-    while timegap < 5:
-        if brightness_button.value:
-            time.sleep(0.1)
-            start_time = time.monotonic() #reset counter
-            if led_brightness > 0.1:
-                led_brightness = 0.02
-            else:
-                led_brightness += 0.02
-            pixels.brightness = led_brightness
-            pixels.fill(GREEN)
-            pixels.show()
-        timegap = time.monotonic() - start_time
-    save_settings()
-    rainbow_cycle(0.05)
-    pixels.fill(OFF)
-    pixels.show()
+    cpx.pixels.fill(OFF)
+    cpx.pixels.show()
 
 def load_settings(fname):
     global led_brightness
@@ -110,12 +108,21 @@ def save_settings():
 
     settings_string = str(led_brightness) + "|" + str(time_delay)
     try:
-        with open("\lucid_settings.txt", "w") as f:
+        with open("/lucid_settings.txt", "w") as f:
             f.write(settings_string)
             f.flush
     except OSError as e:
         print(e)
         pass
+
+def rainbow_cycle(wait):
+    for i in range(10):
+        rc_index = (i * 256 // 10) + 5 * 5
+        cpx.pixels[i] = wheel(rc_index)
+        cpx.pixels.show()
+        time.sleep(wait)
+        cpx.pixels[i] = OFF
+        cpx.pixels.show()
 
 def wheel(pos):
     if pos < 0 or pos > 255:
@@ -127,45 +134,6 @@ def wheel(pos):
         return (0, 255 - pos * 3, pos * 3)
     pos -= 170
     return (pos * 3, 0, 255 - pos * 3)
-
-def rainbow_cycle(wait):
-    for i in range(10):
-        rc_index = (i * 256 // 10) + 5 * 5
-        pixels[i] = wheel(rc_index)
-        pixels.show()
-        time.sleep(wait)
-        pixels[i] = OFF
-        pixels.show()
-
-def get_stanard_deviation(type):
-    counter = 30
-    value_samples = []
-    function_start_time = time.monotonic()
-
-    if type == "IR":
-        for x in range(counter):
-            ir_led.value = True
-            time.sleep(0.005)
-            ir_led.value = False
-            time.sleep(0.001)
-            value = analog1in.value
-            if value > 0:
-                value_samples.append(value)
-            time.sleep(0.17)
-
-    else:
-        for x in range(counter):
-            x,y,z = lis3dh.acceleration
-            all_angles = abs(x),abs(y),abs(z)
-            value_samples.append(sum(all_angles))
-            time.sleep(0.05)
-
-    if len(value_samples) > 10:
-        write_to_file(str(value_samples))
-        average_value = sum(value_samples)/len(value_samples)
-        variance = sum(pow(x-average_value, 2) for x in value_samples) / len(value_samples)
-        standard_deviation = math.sqrt(variance)
-        return standard_deviation
 
 def check_for_movement():
     global log_counter
@@ -183,6 +151,37 @@ def check_for_movement():
     print("face movement count = " + str(len(face_movement)))
     log_eye_movement = get_stanard_deviation("IR")
 
+def get_stanard_deviation(type):
+    counter = 30
+    value_samples = []
+    # function_start_time = time.monotonic()
+
+    if type == "IR":
+        for x in range(counter):
+            ir_led.value = True
+            time.sleep(0.005)
+            ir_led.value = False
+            time.sleep(0.001)
+            value = analog1in.value
+            if value > 0:
+                value_samples.append(value)
+            time.sleep(0.17)
+
+    else:
+        for x in range(counter):
+            x, y, z = lis3dh.acceleration
+            all_angles = abs(x), abs(y), abs(z)
+            value_samples.append(sum(all_angles))
+            time.sleep(0.05)
+
+    if len(value_samples) > 10:
+        write_to_file(str(value_samples))
+        average_value = sum(value_samples)/len(value_samples)
+        squared_diff = [pow(x - average_value, 2) for x in value_samples]
+        variance = sum(squared_diff) / len(value_samples)
+        standard_deviation = math.sqrt(variance)
+        return standard_deviation
+
 def write_to_file(sentence):
     global logfile_linecount
     global log_limit
@@ -196,9 +195,10 @@ def write_to_file(sentence):
         except OSError as e:
             print(e)
             pass
-
-def Average(lst): 
-    return sum(lst) / len(lst) 
+def Average(lst):
+    if len(lst) == 0:
+        return 0  # Handle the case where the list is empty to avoid division by zero
+    return sum(lst) / len(lst)
 
 # MAIN LOOP
 boot_time = time.monotonic()
@@ -210,19 +210,27 @@ logfile_linecount = 0
 REM_count = 0
 
 try:
-    file = open("/logfile.csv","w")
+    file = open("/logfile.csv", "w")
     file.close()
 except OSError as e:
     print(e)
     pass
 
 load_settings("/lucid_settings.txt")
-pixels = neopixel.NeoPixel(board.NEOPIXEL, 10, brightness=led_brightness, auto_write=False)
+brightness = led_brightness
+auto_write = False
+pixels = neopixel.NeoPixel(board.NEOPIXEL, 10, brightness, auto_write)
+
+try:
+    cpu_temperature = microcontroller.cpu.temperature
+    print(f"CPU Temperature: {cpu_temperature} C")
+except NotImplementedError:
+    print("CPU temperature reading is not supported on this board.")
 
 while True:
     if brightness_button.value:
         set_brightness()
-    
+
     if time_delay_button.value:
         set_delay()
 
@@ -238,22 +246,27 @@ while True:
             counter += 1
             average_face_movement = Average(face_movement)*100
             timer = time.monotonic() - boot_time
-            logstring = str(round(timer)) + "," + str(round(log_eye_movement)) + "," + str(round(average_face_movement)) + "," + str(round(microcontroller.cpu.temperature))
+            logstring = (
+                str(round(timer)) + ","
+                + str(round(log_eye_movement)) + ","
+                + str(round(average_face_movement)) + ","
+                + str(round(microcontroller.cpu.temperature))
+            )
             print(logstring)
             write_to_file(logstring)
-            
+
             if log_eye_movement > 1000 and average_face_movement < 50:
                 print("REM detected, wait for second occurance before cueing")
                 if REM_count > 0:
                     print("trigger Rainbow cycle")
                     write_to_file("sweet dreams")
-                    if passive_mode == False:
+                    if not passive_mode:
                         for x in range(rainbow_cycle_count):
                             rainbow_cycle(0.005)
                 else:
                     REM_count += 1
 
             if counter == 5:
-                REM_count = 0          
+                REM_count = 0
                 counter = 0
                 time.sleep(cooldown_delay)
